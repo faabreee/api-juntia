@@ -71,23 +71,23 @@ class OrganizationController {
 
 	@PostMapping("/organizations")
 	@ResponseStatus(HttpStatus.CREATED)
-	OrganizationResponse create(@AuthenticationPrincipal AuthUser user, @Valid @RequestBody CreateOrganizationRequest r) {
+	OrganizationResponse createOrganization(@AuthenticationPrincipal AuthUser user, @Valid @RequestBody CreateOrganizationRequest r) {
 		return OrganizationResponse.of(
 				service.create(user, r.name(), r.type().name(), r.country(), r.currency(), r.timezone()));
 	}
 
 	@GetMapping("/organizations")
-	List<OrganizationResponse> mine(@AuthenticationPrincipal AuthUser user) {
+	List<OrganizationResponse> listMyOrganizations(@AuthenticationPrincipal AuthUser user) {
 		return service.mine(user).stream().map(OrganizationResponse::of).toList();
 	}
 
 	@GetMapping("/organizations/{organizationId}")
-	OrganizationResponse get(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId) {
+	OrganizationResponse getOrganization(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId) {
 		return OrganizationResponse.of(service.get(user, organizationId));
 	}
 
 	@GetMapping("/organizations/{organizationId}/members")
-	List<MemberResponse> members(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId) {
+	List<MemberResponse> listMembers(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId) {
 		return service.members(user, organizationId).stream()
 				.map(m -> new MemberResponse(m.userId(), m.email(), m.displayName(), m.role())).toList();
 	}
@@ -108,13 +108,13 @@ class OrganizationController {
 
 	@PostMapping("/organizations/{organizationId}/invitations")
 	@ResponseStatus(HttpStatus.CREATED)
-	InvitationResponse invite(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId,
+	InvitationResponse inviteMember(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId,
 			@Valid @RequestBody InviteRequest r) {
 		return InvitationResponse.of(service.invite(user, organizationId, r.email(), r.role()));
 	}
 
 	@GetMapping("/organizations/{organizationId}/invitations")
-	List<InvitationResponse> invitations(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId) {
+	List<InvitationResponse> listInvitations(@AuthenticationPrincipal AuthUser user, @PathVariable String organizationId) {
 		return service.pendingInvitations(user, organizationId).stream().map(InvitationResponse::of).toList();
 	}
 
@@ -126,7 +126,7 @@ class OrganizationController {
 	}
 
 	@PostMapping("/invitations/accept")
-	OrganizationResponse accept(@AuthenticationPrincipal AuthUser user, @Valid @RequestBody AcceptInvitationRequest r) {
+	OrganizationResponse acceptInvitation(@AuthenticationPrincipal AuthUser user, @Valid @RequestBody AcceptInvitationRequest r) {
 		return OrganizationResponse.of(service.acceptInvitation(user, r.token()));
 	}
 }

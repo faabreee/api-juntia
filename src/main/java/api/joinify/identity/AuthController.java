@@ -66,7 +66,7 @@ class AuthController {
 	/** Fuerza la emisión de la cookie XSRF-TOKEN para el frontend. */
 	@GetMapping("/csrf")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	void csrf(CsrfToken token) {
+	void csrf(@io.swagger.v3.oas.annotations.Parameter(hidden = true) CsrfToken token) {
 		token.getToken();
 	}
 
