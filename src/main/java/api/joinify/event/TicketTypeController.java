@@ -37,11 +37,11 @@ class TicketTypeController {
 			@NotNull Template template, @Min(0) @Max(100_000_000) long priceMinor, @Min(1) Integer quota,
 			@Min(1) @Max(50) Integer maxPerOrder, Instant salesStart, Instant salesEnd,
 			@NotNull AccessRule.Scope scope, Set<String> sessionIds, @Min(1) Integer maxTotalUses,
-			@Min(1) Integer maxUsesPerSession, @Min(0) @Max(1440) Integer earlyEntryMinutes, Boolean active) {
+			@Min(1) Integer maxUsesPerSession, @Min(0) @Max(1440) Integer earlyEntryMinutes, Boolean active, Boolean nominative) {
 
 		TicketTypeService.Input toInput() {
 			return new TicketTypeService.Input(name, description, template.name(), priceMinor, quota, maxPerOrder,
-					salesStart, salesEnd, scope, sessionIds, maxTotalUses, maxUsesPerSession, earlyEntryMinutes, active);
+					salesStart, salesEnd, scope, sessionIds, maxTotalUses, maxUsesPerSession, earlyEntryMinutes, active, nominative);
 		}
 	}
 

@@ -11,6 +11,8 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,6 +37,31 @@ public abstract class IntegrationTestSupport {
 
 	@MockitoBean
 	protected JavaMailSender mailSender;
+
+	/** Los correos de boletos se arman como MimeMessage: el simulado debe poder crear uno real y vacío. */
+	@BeforeEach
+	void stubMimeMessageCreation() {
+		org.mockito.Mockito.when(mailSender.createMimeMessage())
+				.thenAnswer(invocation -> new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
+	}
+
+	@Autowired(required = false)
+	@org.springframework.beans.factory.annotation.Qualifier("applicationTaskExecutor")
+	private java.util.concurrent.Executor asyncExecutor;
+
+	/**
+	 * Los correos de boletos se envían en segundo plano. Se espera a que terminen antes de pasar a la siguiente prueba:
+	 * si no, un envío tardío tocaría el simulado de correo de la prueba siguiente mientras ésta lo configura.
+	 */
+	@AfterEach
+	void drainAsyncWork() throws InterruptedException {
+		if (asyncExecutor instanceof org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor pool) {
+			long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+			while ((pool.getActiveCount() > 0 || !pool.getThreadPoolExecutor().getQueue().isEmpty()) && System.nanoTime() < deadline) {
+				Thread.sleep(20);
+			}
+		}
+	}
 
 	protected record TestUser(String id, String email, Cookie session) {
 	}

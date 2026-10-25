@@ -48,4 +48,10 @@ class UserRepository {
 		jdbc.sql("UPDATE users SET password_hash = :hash WHERE id = :id")
 				.param("hash", passwordHash).param("id", userId).update();
 	}
+
+	Optional<UserDirectory.Contact> findContactById(String id) {
+		return jdbc.sql("SELECT id, email, display_name FROM users WHERE id = :id").param("id", id)
+				.query((rs, i) -> new UserDirectory.Contact(rs.getString("id"), rs.getString("email"), rs.getString("display_name")))
+				.optional();
+	}
 }

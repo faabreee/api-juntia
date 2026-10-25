@@ -19,15 +19,15 @@ class TicketTypeRepository {
 	record Row(String id, String eventId, String name, String description, String template, long priceMinor,
 			String currency, Integer quota, int maxPerOrder, LocalDateTime salesStart, LocalDateTime salesEnd,
 			AccessRule.Scope scope, Integer maxTotalUses, Integer maxUsesPerSession, int earlyEntryMinutes,
-			boolean active, int taken) {
+			boolean active, int taken, boolean nominative) {
 	}
 
 	/** Datos editables de un tipo de entrada (sin id ni moneda). */
 	record Data(String name, String description, String template, long priceMinor, Integer quota, int maxPerOrder,
-			LocalDateTime salesStart, LocalDateTime salesEnd, AccessRule rule, boolean active) {
+			LocalDateTime salesStart, LocalDateTime salesEnd, AccessRule rule, boolean active, boolean nominative) {
 	}
 
-	private static final String COLUMNS = "id, event_id, name, description, template, price_minor, currency, quota, max_per_order, sales_start, sales_end, access_scope, max_total_uses, max_uses_per_session, early_entry_minutes, active, taken";
+	private static final String COLUMNS = "id, event_id, name, description, template, price_minor, currency, quota, max_per_order, sales_start, sales_end, access_scope, max_total_uses, max_uses_per_session, early_entry_minutes, active, taken, nominative";
 
 	private final JdbcClient jdbc;
 
@@ -46,13 +46,13 @@ class TicketTypeRepository {
 				rs.getObject("sales_start", LocalDateTime.class), rs.getObject("sales_end", LocalDateTime.class),
 				AccessRule.Scope.valueOf(rs.getString("access_scope")), rs.getObject("max_total_uses", Integer.class),
 				rs.getObject("max_uses_per_session", Integer.class), rs.getInt("early_entry_minutes"),
-				rs.getBoolean("active"), rs.getInt("taken"));
+				rs.getBoolean("active"), rs.getInt("taken"), rs.getBoolean("nominative"));
 	}
 
 	String insert(String eventId, String currency, Data d) {
 		String id = UUID.randomUUID().toString();
 		LocalDateTime now = now();
-		jdbc.sql("INSERT INTO ticket_types (id, event_id, name, description, template, price_minor, currency, quota, max_per_order, sales_start, sales_end, access_scope, max_total_uses, max_uses_per_session, early_entry_minutes, active, created_at, updated_at) VALUES (:id, :event, :name, :description, :template, :price, :currency, :quota, :perOrder, :salesStart, :salesEnd, :scope, :total, :perSession, :early, :active, :now, :now)")
+		jdbc.sql("INSERT INTO ticket_types (id, event_id, name, description, template, price_minor, currency, quota, max_per_order, sales_start, sales_end, access_scope, max_total_uses, max_uses_per_session, early_entry_minutes, active, nominative, created_at, updated_at) VALUES (:id, :event, :name, :description, :template, :price, :currency, :quota, :perOrder, :salesStart, :salesEnd, :scope, :total, :perSession, :early, :active, :nominative, :now, :now)")
 				.param("id", id).param("event", eventId).param("currency", currency).param("now", now)
 				.params(common(d)).update();
 		replaceSessions(id, d.rule());
@@ -60,7 +60,7 @@ class TicketTypeRepository {
 	}
 
 	void update(String id, Data d) {
-		jdbc.sql("UPDATE ticket_types SET name = :name, description = :description, template = :template, price_minor = :price, quota = :quota, max_per_order = :perOrder, sales_start = :salesStart, sales_end = :salesEnd, access_scope = :scope, max_total_uses = :total, max_uses_per_session = :perSession, early_entry_minutes = :early, active = :active, updated_at = :now WHERE id = :id")
+		jdbc.sql("UPDATE ticket_types SET name = :name, description = :description, template = :template, price_minor = :price, quota = :quota, max_per_order = :perOrder, sales_start = :salesStart, sales_end = :salesEnd, access_scope = :scope, max_total_uses = :total, max_uses_per_session = :perSession, early_entry_minutes = :early, active = :active, nominative = :nominative, updated_at = :now WHERE id = :id")
 				.param("id", id).param("now", now()).params(common(d)).update();
 		replaceSessions(id, d.rule());
 	}
@@ -80,6 +80,7 @@ class TicketTypeRepository {
 		m.put("perSession", d.rule().maxUsesPerSession());
 		m.put("early", d.rule().earlyEntryMinutes());
 		m.put("active", d.active());
+		m.put("nominative", d.nominative());
 		return m;
 	}
 

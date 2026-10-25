@@ -17,6 +17,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -54,15 +55,17 @@ public class OrderService {
 	private final OrderRepository repository;
 	private final TicketInventory inventory;
 	private final OrganizationAccess organizations;
+	private final ApplicationEventPublisher events;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 	private final Duration holdTime;
 
 	OrderService(OrderRepository repository, TicketInventory inventory, OrganizationAccess organizations,
-			PlatformTransactionManager transactionManager, Clock clock, @Value("${app.orders.hold-minutes}") long holdMinutes) {
+			ApplicationEventPublisher events, PlatformTransactionManager transactionManager, Clock clock, @Value("${app.orders.hold-minutes}") long holdMinutes) {
 		this.repository = repository;
 		this.inventory = inventory;
 		this.organizations = organizations;
+		this.events = events;
 		this.tx = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 		this.holdTime = Duration.ofMinutes(holdMinutes);
@@ -123,6 +126,9 @@ public class OrderService {
 			inventory.reserve(ticket, ordered.get(i).quantity()); // 409 si no alcanza: revierte toda la orden
 			repository.insertItem(orderId, ticket.id(), ticket.name(), ordered.get(i).quantity(), ticket.priceMinor());
 		}
+		if (free) {
+			events.publishEvent(new OrderPaid(orderId)); // se emiten los boletos al confirmarse la transacción
+		}
 		return view(repository.findById(orderId).orElseThrow(), false);
 	}
 
@@ -173,7 +179,13 @@ public class OrderService {
 
 	/** Marca la orden como pagada si sigue pendiente. La etapa de pagos decide qué hacer si devuelve false. */
 	public boolean confirmPayment(String orderId) {
-		return Boolean.TRUE.equals(tx.execute(status -> repository.markPaid(orderId, LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))));
+		return Boolean.TRUE.equals(tx.execute(status -> {
+			if (!repository.markPaid(orderId, LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))) {
+				return false;
+			}
+			events.publishEvent(new OrderPaid(orderId));
+			return true;
+		}));
 	}
 
 	/** Datos de una orden para cobrarla. Una orden ajena se comporta como inexistente. */
@@ -221,6 +233,7 @@ public class OrderService {
 				reserved.forEach(r -> inventory.release(r.ticketTypeId(), r.quantity()));
 				return false;
 			}
+			events.publishEvent(new OrderPaid(orderId));
 			return true;
 		}));
 	}
@@ -234,8 +247,26 @@ public class OrderService {
 			for (ItemRow item : repository.findItems(orderId)) {
 				inventory.release(item.ticketTypeId(), item.quantity());
 			}
+			events.publishEvent(new OrderRefunded(orderId));
 			return true;
 		}));
+	}
+
+	/** Líneas de una orden pagada, para emitir sus boletos. Vacío si la orden no está pagada. */
+	public record IssuanceData(String orderId, String eventId, String buyerId, List<Line> lines) {
+		public record Line(String orderItemId, String ticketTypeId, int quantity) {
+		}
+	}
+
+	public java.util.Optional<IssuanceData> issuanceDataOf(String orderId) {
+		return repository.findById(orderId).filter(o -> o.status() == OrderStatus.PAID).map(o -> new IssuanceData(o.id(), o.eventId(),
+				o.buyerId(), repository.findItemsWithId(o.id()).stream()
+						.map(i -> new IssuanceData.Line(i.id(), i.ticketTypeId(), i.quantity())).toList()));
+	}
+
+	/** El comprador de una orden (para comprobar que un boleto es de quien lo pide). */
+	public java.util.Optional<String> buyerOf(String orderId) {
+		return repository.findById(orderId).map(OrderRow::buyerId);
 	}
 
 	/** Órdenes de una organización, para su panel de ventas (el llamador ya comprobó el permiso). */

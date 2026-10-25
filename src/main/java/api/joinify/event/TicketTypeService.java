@@ -27,7 +27,7 @@ class TicketTypeService {
 	/** Entrada del cliente ya traducida a tipos de dominio. */
 	record Input(String name, String description, String template, long priceMinor, Integer quota,
 			Integer maxPerOrder, Instant salesStart, Instant salesEnd, AccessRule.Scope scope, Set<String> sessionIds,
-			Integer maxTotalUses, Integer maxUsesPerSession, Integer earlyEntryMinutes, Boolean active) {
+			Integer maxTotalUses, Integer maxUsesPerSession, Integer earlyEntryMinutes, Boolean active, Boolean nominative) {
 	}
 
 	private final TicketTypeRepository repository;
@@ -114,7 +114,7 @@ class TicketTypeService {
 		}
 		return new TicketTypeRepository.Data(in.name().trim(), blankToNull(in.description()), in.template(),
 				in.priceMinor(), in.quota(), maxPerOrder, utc(in.salesStart()), utc(in.salesEnd()), rule,
-				in.active() == null || in.active());
+				in.active() == null || in.active(), in.nominative() != null && in.nominative());
 	}
 
 	/**

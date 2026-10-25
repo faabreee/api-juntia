@@ -21,6 +21,9 @@ class OrderRepository {
 	record ItemRow(String ticketTypeId, String name, int quantity, long unitPriceMinor) {
 	}
 
+	record ItemWithId(String id, String ticketTypeId, int quantity) {
+	}
+
 	// El slug y el título del evento solo se leen para mostrar la orden.
 	private static final String SELECT = "SELECT o.id, o.event_id, e.slug, e.title, o.buyer_user_id, o.status, o.currency, o.total_minor, o.request_hash, o.created_at, o.expires_at, o.paid_at, o.organization_id, o.subtotal_minor, o.fee_minor, o.fee_mode FROM orders o JOIN events e ON e.id = o.event_id";
 
@@ -109,5 +112,11 @@ class OrderRepository {
 	List<OrderRow> findByOrganization(String organizationId, int limit) {
 		return jdbc.sql(SELECT + " WHERE o.organization_id = :org ORDER BY o.created_at DESC, o.id LIMIT :limit")
 				.param("org", organizationId).param("limit", limit).query(OrderRepository::map).list();
+	}
+
+	List<ItemWithId> findItemsWithId(String orderId) {
+		return jdbc.sql("SELECT id, ticket_type_id, quantity FROM order_items WHERE order_id = :id ORDER BY ticket_type_name, id")
+				.param("id", orderId)
+				.query((rs, i) -> new ItemWithId(rs.getString("id"), rs.getString("ticket_type_id"), rs.getInt("quantity"))).list();
 	}
 }

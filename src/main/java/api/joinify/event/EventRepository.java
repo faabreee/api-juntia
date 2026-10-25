@@ -115,6 +115,11 @@ class EventRepository {
 				.param("id", eventId).param("org", orgId).query(EventRepository::mapEvent).optional();
 	}
 
+	Optional<EventRow> findEventById(String eventId) {
+		return jdbc.sql("SELECT " + EVENT_COLUMNS + " FROM events WHERE id = :id").param("id", eventId)
+				.query(EventRepository::mapEvent).optional();
+	}
+
 	Optional<EventRow> findPublicBySlug(String slug) {
 		return jdbc.sql("SELECT " + EVENT_COLUMNS + " FROM events WHERE slug = :slug AND status IN ('PUBLISHED', 'CANCELLED')")
 				.param("slug", slug).query(EventRepository::mapEvent).optional();
