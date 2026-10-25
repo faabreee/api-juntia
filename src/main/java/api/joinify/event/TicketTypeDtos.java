@@ -39,12 +39,13 @@ final class TicketTypeDtos {
 	/** Entrada tal como la ve el público (solo tipos activos). */
 	record PublicTicketTypeResponse(@NotNull String id, @NotNull String name, String description, long priceMinor,
 			@NotNull String currency, int maxPerOrder, Instant salesStart, Instant salesEnd,
-			@NotNull SaleStatus saleStatus, @NotNull AccessRule.Scope scope, @NotNull List<String> sessionIds) {
+			@NotNull SaleStatus saleStatus, @NotNull AccessRule.Scope scope, @NotNull List<String> sessionIds,
+			Integer maxTotalUses, Integer maxUsesPerSession) {
 
 		static PublicTicketTypeResponse of(TicketTypeResponse t) {
 			return new PublicTicketTypeResponse(t.id(), t.name(), t.description(), t.priceMinor(), t.currency(),
 					t.maxPerOrder(), t.salesStart(), t.salesEnd(), t.saleStatus(), t.scope(),
-					List.copyOf(t.sessionIds()));
+					List.copyOf(t.sessionIds()), t.maxTotalUses(), t.maxUsesPerSession());
 		}
 	}
 }

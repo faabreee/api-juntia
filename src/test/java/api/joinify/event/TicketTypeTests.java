@@ -175,6 +175,7 @@ class TicketTypeTests extends IntegrationTestSupport {
 		TestUser owner = newUser();
 		Festival f = festival(owner);
 		Instant now = Instant.now();
+		createType(owner, f, json("Pase limitado", "N_USES", 1000, "ALL_SESSIONS", List.of(), 3, 1));
 		createType(owner, f, "{\"name\":\"En venta\",\"template\":\"CUSTOM\",\"priceMinor\":1000,\"scope\":\"ALL_SESSIONS\"}");
 		createType(owner, f, "{\"name\":\"Pronto\",\"template\":\"CUSTOM\",\"priceMinor\":1000,\"scope\":\"ALL_SESSIONS\",\"salesStart\":\"%s\"}".formatted(now.plus(Duration.ofDays(5))));
 		createType(owner, f, "{\"name\":\"Terminó\",\"template\":\"CUSTOM\",\"priceMinor\":1000,\"scope\":\"ALL_SESSIONS\",\"salesStart\":\"%s\",\"salesEnd\":\"%s\"}".formatted(now.minus(Duration.ofDays(5)), now.minus(Duration.ofDays(1))));
@@ -183,7 +184,10 @@ class TicketTypeTests extends IntegrationTestSupport {
 		mvc.perform(as(owner, post("/api/organizations/" + f.orgId() + "/events/" + f.eventId() + "/publish"))).andExpect(status().isOk());
 
 		mvc.perform(get("/api/public/events/" + f.slug())).andExpect(status().isOk())
-				.andExpect(jsonPath("$.ticketTypes.length()").value(3))
+				.andExpect(jsonPath("$.ticketTypes.length()").value(4))
+				// la regla de acceso es pública: el comprador sabe qué compra
+				.andExpect(jsonPath("$.ticketTypes[?(@.name=='Pase limitado')].maxTotalUses").value(3))
+				.andExpect(jsonPath("$.ticketTypes[?(@.name=='Pase limitado')].maxUsesPerSession").value(1))
 				.andExpect(jsonPath("$.ticketTypes[?(@.name=='En venta')].saleStatus").value("ON_SALE"))
 				.andExpect(jsonPath("$.ticketTypes[?(@.name=='Pronto')].saleStatus").value("NOT_STARTED"))
 				.andExpect(jsonPath("$.ticketTypes[?(@.name=='Terminó')].saleStatus").value("ENDED"))
