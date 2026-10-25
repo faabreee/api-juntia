@@ -45,6 +45,11 @@ class TicketRepository {
 				.param("type", ticketTypeId).param("owner", ownerId).param("code", code).param("now", now).update();
 	}
 
+	/** Bloquea la orden hasta el fin de la transacción: serializa a los emisores de una misma orden. */
+	void lockOrder(String orderId) {
+		jdbc.sql("SELECT id FROM orders WHERE id = :id FOR UPDATE").param("id", orderId).query(String.class).optional();
+	}
+
 	boolean exists(String orderItemId, int seq) {
 		return jdbc.sql("SELECT COUNT(*) FROM tickets WHERE order_item_id = :item AND seq = :seq").param("item", orderItemId)
 				.param("seq", seq).query(Long.class).single() > 0;

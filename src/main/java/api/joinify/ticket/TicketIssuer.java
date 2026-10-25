@@ -28,6 +28,7 @@ class TicketIssuer {
 
 	private static final Logger log = LoggerFactory.getLogger(TicketIssuer.class);
 	private static final int MAX_CODE_ATTEMPTS = 8;
+	private static final int MAX_LOCK_ATTEMPTS = 4;
 
 	private final TicketRepository repository;
 	private final OrderService orders;
@@ -49,7 +50,29 @@ class TicketIssuer {
 	/** Emite los boletos que falten de la orden. Devuelve cuántos creó (0 si no está pagada o ya estaban todos). */
 	int issue(String orderId) {
 		AtomicInteger created = new AtomicInteger();
+		// Con varios emisores a la vez (evento, reintento, reparación) MySQL puede abortar uno por interbloqueo: se reintenta.
+		for (int attempt = 1;; attempt++) {
+			created.set(0);
+			try {
+				issueOnce(orderId, created);
+				break;
+			} catch (org.springframework.dao.ConcurrencyFailureException e) {
+				if (attempt >= MAX_LOCK_ATTEMPTS) {
+					throw e;
+				}
+				log.warn("Orden {}: conflicto de concurrencia al emitir boletos; reintento {}", orderId, attempt);
+			}
+		}
+		if (created.get() > 0) {
+			log.info("Orden {}: {} boleto(s) emitido(s)", orderId, created.get());
+			events.publishEvent(new TicketsIssued(orderId)); // fuera de la transacción: el correo ve los boletos ya guardados
+		}
+		return created.get();
+	}
+
+	private void issueOnce(String orderId, AtomicInteger created) {
 		tx.executeWithoutResult(status -> {
+			repository.lockOrder(orderId); // los emisores de esta orden hacen cola: el segundo ya ve los boletos del primero
 			IssuanceData data = orders.issuanceDataOf(orderId).orElse(null);
 			if (data == null) {
 				return; // no está pagada (o no existe): nada que emitir
@@ -63,11 +86,6 @@ class TicketIssuer {
 				}
 			}
 		});
-		if (created.get() > 0) {
-			log.info("Orden {}: {} boleto(s) emitido(s)", orderId, created.get());
-			events.publishEvent(new TicketsIssued(orderId)); // fuera de la transacción: el correo ve los boletos ya guardados
-		}
-		return created.get();
 	}
 
 	private boolean create(IssuanceData data, IssuanceData.Line line, int seq, LocalDateTime now) {

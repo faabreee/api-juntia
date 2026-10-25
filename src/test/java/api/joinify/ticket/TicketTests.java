@@ -208,13 +208,13 @@ class TicketTests extends IntegrationTestSupport {
 	void concurrentIssuance_createsExactlyOneTicketPerSeat() throws Exception {
 		Shop shop = shop(8_000, false);
 		TestUser buyer = newUser();
-		String order = paidOrder(shop, buyer, 4);
+		String order = paidOrder(shop, buyer, 10);
 		jdbc.sql("DELETE FROM tickets WHERE order_id = :id").param("id", order).update(); // como si la emisión no hubiera ocurrido
 
-		ExecutorService pool = Executors.newFixedThreadPool(8);
+		ExecutorService pool = Executors.newFixedThreadPool(16);
 		CountDownLatch go = new CountDownLatch(1);
 		List<Future<Integer>> results = new ArrayList<>();
-		for (int i = 0; i < 8; i++) {
+		for (int i = 0; i < 16; i++) {
 			results.add(pool.submit(() -> {
 				go.await();
 				return issuer.issue(order);
@@ -227,9 +227,9 @@ class TicketTests extends IntegrationTestSupport {
 		}
 		pool.shutdown();
 
-		assertThat(ticketCount(order)).isEqualTo(4);
-		assertThat(created).as("entre todos los emisores crearon cada boleto una sola vez").isEqualTo(4);
-		assertThat(jdbc.sql("SELECT COUNT(DISTINCT code) FROM tickets WHERE order_id = :id").param("id", order).query(Long.class).single()).isEqualTo(4);
+		assertThat(ticketCount(order)).isEqualTo(10);
+		assertThat(created).as("entre todos los emisores crearon cada boleto una sola vez").isEqualTo(10);
+		assertThat(jdbc.sql("SELECT COUNT(DISTINCT code) FROM tickets WHERE order_id = :id").param("id", order).query(Long.class).single()).isEqualTo(10);
 	}
 
 	@Test
