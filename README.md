@@ -11,6 +11,17 @@ src/test/java/api/joinify/   # pruebas (incluirá ModularityTests)
 docs/adr/                    # registros de decisiones de arquitectura
 ```
 
+## Infraestructura local
+
+```bash
+docker compose up -d --wait
+```
+
+- MySQL 8.4 en `localhost:3306` (db/usuario/clave por defecto: `juntia`)
+- Mailpit: SMTP `localhost:1025`, interfaz http://localhost:8025
+
+Valores configurables copiando `.env.example` a `.env`.
+
 ## Roadmap
 
 Etapa 0 (Fundaciones) en curso: docker compose, migración V1, actuator, Swagger, CI.

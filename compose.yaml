@@ -1,0 +1,30 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: juntia-mysql
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-juntia}
+      MYSQL_USER: ${MYSQL_USER:-juntia}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-juntia}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      TZ: UTC
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: juntia-mailpit
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
+volumes:
+  mysql-data:
