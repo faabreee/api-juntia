@@ -22,6 +22,16 @@ docker compose up -d --wait
 
 Valores configurables copiando `.env.example` a `.env`.
 
+## API
+
+```bash
+./gradlew bootRun
+```
+
+- Health: http://localhost:8080/actuator/health
+- Swagger UI: http://localhost:8080/swagger-ui.html
+- OpenAPI JSON: http://localhost:8080/v3/api-docs
+
 ## Roadmap
 
 Etapa 0 (Fundaciones) en curso: docker compose, migración V1, actuator, Swagger, CI.

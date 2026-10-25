@@ -7,7 +7,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Configuración provisional: solo health es público.
+ * Configuración provisional: solo health y la documentación de la API son públicos.
  * La autenticación real se define con el ADR 0005.
  */
 @Configuration
@@ -18,7 +18,7 @@ public class SecurityConfig {
 		return http
 				.csrf(AbstractHttpConfigurer::disable)
 				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/actuator/health/**").permitAll()
+						.requestMatchers("/actuator/health/**", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 						.anyRequest().authenticated())
 				.build();
 	}
