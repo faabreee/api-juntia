@@ -478,7 +478,7 @@ class TicketTests extends IntegrationTestSupport {
 			}
 		}
 		assertThat(hasPdf).isTrue();
-		assertThat(text).contains("2 boletos").contains("/tickets");
+		assertThat(text).contains("Aquí están tus 2 boletos").contains("todos los boletos").contains("/tickets");
 	}
 
 	@Test

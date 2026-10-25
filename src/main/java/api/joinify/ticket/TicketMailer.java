@@ -71,11 +71,12 @@ class TicketMailer {
 		var event = details.getFirst().event();
 		DateTimeFormatter format = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
 				.withLocale(Locale.forLanguageTag("es")).withZone(ZoneId.of(event.timezone()));
-		StringBuilder body = new StringBuilder("Hola ").append(contact.displayName()).append(",\n\n¡Tu compra está confirmada! Aquí están tus ")
-				.append(details.size()).append(details.size() == 1 ? " boleto" : " boletos").append(" para ").append(event.title()).append(".\n\n");
+		String what = details.size() == 1 ? "Aquí está tu boleto" : "Aquí están tus " + details.size() + " boletos";
+		StringBuilder body = new StringBuilder("Hola ").append(contact.displayName()).append(",\n\n¡Tu compra está confirmada! ")
+				.append(what).append(" para ").append(event.title()).append(".\n\n");
 		event.sessions().forEach(s -> body.append("• ").append(s.name()).append(": ").append(format.format(s.startsAt())).append('\n'));
 		body.append("\nTambién los encuentras siempre en Mis boletos:\n").append(frontendUrl).append("/tickets\n\n")
-				.append("Adjuntamos un PDF con todos los boletos. Presenta el código QR en la entrada.\n");
+				.append("Adjuntamos un PDF con " + (details.size() == 1 ? "tu boleto" : "todos los boletos") + ". Presenta el código QR en la entrada.\n");
 
 		MimeMessage message = mailSender.createMimeMessage();
 		MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
