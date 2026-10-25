@@ -19,7 +19,7 @@ class TicketTypeRepository {
 	record Row(String id, String eventId, String name, String description, String template, long priceMinor,
 			String currency, Integer quota, int maxPerOrder, LocalDateTime salesStart, LocalDateTime salesEnd,
 			AccessRule.Scope scope, Integer maxTotalUses, Integer maxUsesPerSession, int earlyEntryMinutes,
-			boolean active) {
+			boolean active, int taken) {
 	}
 
 	/** Datos editables de un tipo de entrada (sin id ni moneda). */
@@ -27,7 +27,7 @@ class TicketTypeRepository {
 			LocalDateTime salesStart, LocalDateTime salesEnd, AccessRule rule, boolean active) {
 	}
 
-	private static final String COLUMNS = "id, event_id, name, description, template, price_minor, currency, quota, max_per_order, sales_start, sales_end, access_scope, max_total_uses, max_uses_per_session, early_entry_minutes, active";
+	private static final String COLUMNS = "id, event_id, name, description, template, price_minor, currency, quota, max_per_order, sales_start, sales_end, access_scope, max_total_uses, max_uses_per_session, early_entry_minutes, active, taken";
 
 	private final JdbcClient jdbc;
 
@@ -46,7 +46,7 @@ class TicketTypeRepository {
 				rs.getObject("sales_start", LocalDateTime.class), rs.getObject("sales_end", LocalDateTime.class),
 				AccessRule.Scope.valueOf(rs.getString("access_scope")), rs.getObject("max_total_uses", Integer.class),
 				rs.getObject("max_uses_per_session", Integer.class), rs.getInt("early_entry_minutes"),
-				rs.getBoolean("active"));
+				rs.getBoolean("active"), rs.getInt("taken"));
 	}
 
 	String insert(String eventId, String currency, Data d) {
@@ -115,5 +115,29 @@ class TicketTypeRepository {
 	boolean sessionInUse(String sessionId) {
 		return jdbc.sql("SELECT COUNT(*) FROM ticket_type_sessions WHERE session_id = :id").param("id", sessionId)
 				.query(Long.class).single() > 0;
+	}
+
+	/**
+	 * Reserva cupo con un UPDATE condicional atómico: la fila queda bloqueada hasta el commit, así que dos
+	 * compradores nunca ven el mismo cupo libre. Devuelve false si no alcanza.
+	 */
+	boolean tryReserve(String ticketTypeId, int quantity) {
+		return jdbc.sql("UPDATE ticket_types SET taken = taken + :qty WHERE id = :id AND (quota IS NULL OR taken + :qty <= quota)")
+				.param("qty", quantity).param("id", ticketTypeId).update() == 1;
+	}
+
+	void release(String ticketTypeId, int quantity) {
+		jdbc.sql("UPDATE ticket_types SET taken = taken - :qty WHERE id = :id AND taken >= :qty")
+				.param("qty", quantity).param("id", ticketTypeId).update();
+	}
+
+	long totalTaken(String eventId) {
+		return jdbc.sql("SELECT COALESCE(SUM(taken), 0) FROM ticket_types WHERE event_id = :event").param("event", eventId)
+				.query(Long.class).single();
+	}
+
+	Optional<Row> findById(String id) {
+		return jdbc.sql("SELECT " + COLUMNS + " FROM ticket_types WHERE id = :id").param("id", id)
+				.query(TicketTypeRepository::map).optional();
 	}
 }

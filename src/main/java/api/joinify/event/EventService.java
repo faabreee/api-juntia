@@ -168,7 +168,9 @@ class EventService {
 		if (event(orgId, eventId).status() != EventStatus.PUBLISHED) {
 			throw conflict("Solo se puede despublicar un evento publicado");
 		}
-		// Las etapas de ventas añadirán aquí la regla "no despublicar con entradas vendidas".
+		if (ticketTypes.totalTaken(eventId) > 0) {
+			throw conflict("Ya hay entradas reservadas o vendidas: no se puede despublicar; cancela el evento si ya no se realizará");
+		}
 		repository.updateStatus(eventId, EventStatus.DRAFT, null);
 		return event(orgId, eventId);
 	}

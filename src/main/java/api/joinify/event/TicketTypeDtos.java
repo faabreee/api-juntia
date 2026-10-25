@@ -23,7 +23,8 @@ final class TicketTypeDtos {
 	record TicketTypeResponse(@NotNull String id, @NotNull String name, String description, @NotNull Template template,
 			long priceMinor, @NotNull String currency, Integer quota, int maxPerOrder, Instant salesStart,
 			Instant salesEnd, @NotNull AccessRule.Scope scope, @NotNull Set<String> sessionIds, Integer maxTotalUses,
-			Integer maxUsesPerSession, int earlyEntryMinutes, boolean active, @NotNull SaleStatus saleStatus) {
+			Integer maxUsesPerSession, int earlyEntryMinutes, boolean active, @NotNull SaleStatus saleStatus,
+			int taken) {
 
 		static TicketTypeResponse of(TicketTypeRepository.Row r, Set<String> sessionIds, Instant now) {
 			Instant start = r.salesStart() == null ? null : r.salesStart().toInstant(ZoneOffset.UTC);
@@ -32,7 +33,7 @@ final class TicketTypeDtos {
 					: end != null && now.isAfter(end) ? SaleStatus.ENDED : SaleStatus.ON_SALE;
 			return new TicketTypeResponse(r.id(), r.name(), r.description(), Template.valueOf(r.template()),
 					r.priceMinor(), r.currency(), r.quota(), r.maxPerOrder(), start, end, r.scope(), sessionIds,
-					r.maxTotalUses(), r.maxUsesPerSession(), r.earlyEntryMinutes(), r.active(), status);
+					r.maxTotalUses(), r.maxUsesPerSession(), r.earlyEntryMinutes(), r.active(), status, r.taken());
 		}
 	}
 
@@ -40,12 +41,13 @@ final class TicketTypeDtos {
 	record PublicTicketTypeResponse(@NotNull String id, @NotNull String name, String description, long priceMinor,
 			@NotNull String currency, int maxPerOrder, Instant salesStart, Instant salesEnd,
 			@NotNull SaleStatus saleStatus, @NotNull AccessRule.Scope scope, @NotNull List<String> sessionIds,
-			Integer maxTotalUses, Integer maxUsesPerSession) {
+			Integer maxTotalUses, Integer maxUsesPerSession, boolean soldOut) {
 
 		static PublicTicketTypeResponse of(TicketTypeResponse t) {
 			return new PublicTicketTypeResponse(t.id(), t.name(), t.description(), t.priceMinor(), t.currency(),
 					t.maxPerOrder(), t.salesStart(), t.salesEnd(), t.saleStatus(), t.scope(),
-					List.copyOf(t.sessionIds()), t.maxTotalUses(), t.maxUsesPerSession());
+					List.copyOf(t.sessionIds()), t.maxTotalUses(), t.maxUsesPerSession(),
+					t.quota() != null && t.taken() >= t.quota());
 		}
 	}
 }

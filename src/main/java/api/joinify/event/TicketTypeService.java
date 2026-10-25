@@ -64,8 +64,10 @@ class TicketTypeService {
 	TicketTypeResponse update(AuthUser user, String orgId, String eventId, String ticketTypeId, Input in) {
 		access.requireManager(orgId, user.getId());
 		editable(event(orgId, eventId));
-		find(eventId, ticketTypeId);
-		repository.update(ticketTypeId, toData(eventId, in));
+		TicketTypeRepository.Row current = find(eventId, ticketTypeId);
+		TicketTypeRepository.Data data = toData(eventId, in);
+		guardAgainstBreakingSoldTickets(current, data);
+		repository.update(ticketTypeId, data);
 		return one(eventId, ticketTypeId);
 	}
 
@@ -74,8 +76,13 @@ class TicketTypeService {
 		access.requireManager(orgId, user.getId());
 		editable(event(orgId, eventId));
 		find(eventId, ticketTypeId);
-		// Las etapas de venta añadirán aquí la regla "no eliminar con boletos vendidos" (se desactiva en su lugar).
-		repository.delete(ticketTypeId);
+		try {
+			repository.delete(ticketTypeId);
+		} catch (org.springframework.dao.DataIntegrityViolationException e) {
+			// Las órdenes referencian el tipo de entrada: no se borra, se oculta.
+			throw new ResponseStatusException(HttpStatus.CONFLICT,
+					"Esta entrada ya tiene órdenes; ocúltala para el público en lugar de eliminarla");
+		}
 	}
 
 	/** Valida y traduce la entrada; acumula todos los problemas para informar de una vez. */
@@ -108,6 +115,32 @@ class TicketTypeService {
 		return new TicketTypeRepository.Data(in.name().trim(), blankToNull(in.description()), in.template(),
 				in.priceMinor(), in.quota(), maxPerOrder, utc(in.salesStart()), utc(in.salesEnd()), rule,
 				in.active() == null || in.active());
+	}
+
+	/**
+	 * Con cupo ya reservado o vendido (ADR 0004): la regla de acceso no puede cambiar y el cupo no puede quedar por
+	 * debajo de lo tomado. El precio, el nombre y la visibilidad sí se pueden cambiar (las órdenes guardan su foto).
+	 */
+	private void guardAgainstBreakingSoldTickets(TicketTypeRepository.Row current, TicketTypeRepository.Data next) {
+		if (current.taken() == 0) {
+			return;
+		}
+		Set<String> currentSessions = repository.sessionIds(current.id());
+		AccessRule currentRule = new AccessRule(current.scope(), currentSessions, current.maxTotalUses(),
+				current.maxUsesPerSession(), current.earlyEntryMinutes());
+		AccessRule nextRule = next.rule();
+		boolean sameRule = currentRule.scope() == nextRule.scope()
+				&& java.util.Objects.equals(currentRule.maxTotalUses(), nextRule.maxTotalUses())
+				&& java.util.Objects.equals(currentRule.maxUsesPerSession(), nextRule.maxUsesPerSession())
+				&& currentRule.earlyEntryMinutes() == nextRule.earlyEntryMinutes();
+		if (!sameRule || !currentSessions.equals(nextRule.sessionIds())) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT,
+					"Ya hay entradas reservadas o vendidas: no se puede cambiar la regla de acceso; crea otro tipo de entrada");
+		}
+		if (next.quota() != null && next.quota() < current.taken()) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT,
+					"El cupo no puede ser menor que las entradas ya reservadas o vendidas (" + current.taken() + ")");
+		}
 	}
 
 	private TicketTypeResponse one(String eventId, String id) {
