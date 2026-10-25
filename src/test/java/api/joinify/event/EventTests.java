@@ -111,7 +111,8 @@ class EventTests extends IntegrationTestSupport {
 		String orgId = createOrg(owner);
 		String eventId = createEvent(owner, orgId, "Sin sesiones");
 
-		mvc.perform(as(owner, post(base(orgId, eventId) + "/publish"))).andExpect(status().isUnprocessableContent());
+		mvc.perform(as(owner, post(base(orgId, eventId) + "/publish"))).andExpect(status().isUnprocessableContent())
+				.andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("Agrega al menos una sesión")));
 
 		addSession(owner, orgId, eventId, "Pasada", Instant.now().minus(Duration.ofDays(10)), null);
 		mvc.perform(as(owner, post(base(orgId, eventId) + "/publish"))).andExpect(status().isUnprocessableContent());
