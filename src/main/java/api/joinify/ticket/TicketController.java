@@ -21,6 +21,7 @@ import api.joinify.identity.AuthUser;
 import api.joinify.ticket.TicketRepository.TicketRow;
 import api.joinify.ticket.TicketService.TicketDetail;
 import api.joinify.ticket.TicketService.TicketView;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -45,9 +46,11 @@ class TicketController {
 		}
 	}
 
+	@Schema(name = "TicketVenueResponse")
 	record VenueResponse(String name, String address, String city) {
 	}
 
+	@Schema(name = "TicketSessionResponse")
 	record SessionResponse(@NotNull String id, @NotNull String name, @NotNull Instant startsAt, @NotNull Instant endsAt, VenueResponse venue) {
 		static SessionResponse of(SessionInfo s) {
 			return new SessionResponse(s.id(), s.name(), s.startsAt(), s.endsAt(),
