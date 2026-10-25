@@ -50,6 +50,50 @@ class TicketRepository {
 		jdbc.sql("SELECT id FROM orders WHERE id = :id FOR UPDATE").param("id", orderId).query(String.class).optional();
 	}
 
+	Optional<TicketRow> findById(String ticketId) {
+		return jdbc.sql(SELECT + " WHERE t.id = :id").param("id", ticketId).query(TicketRepository::map).optional();
+	}
+
+	Optional<TicketRow> findByEventAndCode(String eventId, String code) {
+		return jdbc.sql(SELECT + " WHERE t.event_id = :event AND t.code = :code").param("event", eventId).param("code", code)
+				.query(TicketRepository::map).optional();
+	}
+
+	void lockTicket(String ticketId) {
+		jdbc.sql("SELECT id FROM tickets WHERE id = :id FOR UPDATE").param("id", ticketId).query(String.class).optional();
+	}
+
+	void markFirstCheckIn(String ticketId, LocalDateTime when) {
+		jdbc.sql("UPDATE tickets SET first_checkin_at = COALESCE(first_checkin_at, :when) WHERE id = :id").param("when", when)
+				.param("id", ticketId).update();
+	}
+
+	boolean hasCheckedIn(String ticketId) {
+		return jdbc.sql("SELECT COUNT(*) FROM tickets WHERE id = :id AND first_checkin_at IS NOT NULL").param("id", ticketId)
+				.query(Long.class).single() > 0;
+	}
+
+	long countValidByEvent(String eventId) {
+		return jdbc.sql("SELECT COUNT(*) FROM tickets WHERE event_id = :event AND status = 'VALID'").param("event", eventId)
+				.query(Long.class).single();
+	}
+
+	List<TicketDirectory.AttendeeMatch> search(String eventId, String query, String code, int limit) {
+		String like = "%" + query.toLowerCase(java.util.Locale.ROOT).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+		return jdbc.sql("SELECT t.id, t.code, t.status, tt.name AS type_name, t.attendee_name, u.display_name, u.email FROM tickets t JOIN ticket_types tt ON tt.id = t.ticket_type_id JOIN users u ON u.id = t.owner_user_id WHERE t.event_id = :event AND (t.code = :code OR LOWER(t.attendee_name) LIKE :like ESCAPE '\\\\' OR LOWER(u.email) LIKE :like ESCAPE '\\\\' OR LOWER(u.display_name) LIKE :like ESCAPE '\\\\') ORDER BY t.attendee_name, u.display_name, t.code LIMIT :limit")
+				.param("event", eventId).param("code", code == null ? "" : code).param("like", like).param("limit", limit)
+				.query((rs, i) -> new TicketDirectory.AttendeeMatch(rs.getString("id"), ShortCode.format(rs.getString("code")),
+						Status.valueOf(rs.getString("status")) == Status.VALID, rs.getString("type_name"), rs.getString("attendee_name"),
+						rs.getString("display_name"), mask(rs.getString("email"))))
+				.list();
+	}
+
+	/** a***@dominio.com: el personal de puerta reconoce al comprador sin ver su correo completo. */
+	private static String mask(String email) {
+		int at = email.indexOf('@');
+		return at <= 1 ? email : email.charAt(0) + "***" + email.substring(at);
+	}
+
 	boolean exists(String orderItemId, int seq) {
 		return jdbc.sql("SELECT COUNT(*) FROM tickets WHERE order_item_id = :item AND seq = :seq").param("item", orderItemId)
 				.param("seq", seq).query(Long.class).single() > 0;

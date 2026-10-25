@@ -74,7 +74,9 @@ class TicketService {
 		if (name.length() < 2 || name.length() > MAX_ATTENDEE_NAME) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre debe tener entre 2 y " + MAX_ATTENDEE_NAME + " caracteres");
 		}
-		// Etapa 7: aquí se rechazará el cambio de nombre si el boleto ya ingresó.
+		if (repository.hasCheckedIn(ticketId)) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "El boleto ya se usó para ingresar: el nombre no se puede cambiar");
+		}
 		repository.updateAttendee(ticketId, name);
 		return view(owned(owner, ticketId));
 	}
