@@ -19,7 +19,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
 
 import jakarta.servlet.http.Cookie;
 
@@ -72,7 +72,7 @@ public abstract class IntegrationTestSupport {
 		return matcher.group(1);
 	}
 
-	protected MockHttpServletRequestBuilder as(TestUser user, MockHttpServletRequestBuilder request) {
+	protected <B extends AbstractMockHttpServletRequestBuilder<B>> B as(TestUser user, B request) {
 		return request.cookie(user.session()).with(csrf());
 	}
 }

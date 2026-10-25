@@ -42,4 +42,9 @@ public class OrganizationAccess {
 		}
 		return role;
 	}
+
+	/** Nombre público de la organización (para páginas públicas de eventos). */
+	public String nameOf(String organizationId) {
+		return repository.organizationName(organizationId);
+	}
 }
