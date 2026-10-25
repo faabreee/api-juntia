@@ -47,4 +47,9 @@ public class OrganizationAccess {
 	public String nameOf(String organizationId) {
 		return repository.organizationName(organizationId);
 	}
+
+	/** Moneda (ISO 4217) de la organización; los precios de sus entradas se expresan en ella. */
+	public String currencyOf(String organizationId) {
+		return repository.organizationCurrency(organizationId);
+	}
 }

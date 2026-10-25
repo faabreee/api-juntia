@@ -59,6 +59,7 @@ final class EventDtos {
 
 	record PublicEventResponse(@NotNull String slug, @NotNull String title, String description,
 			@NotNull EventStatus status, @NotNull String timezone, @NotNull String organizationName, String coverUrl,
-			String cancelReason, @NotNull List<SessionResponse> sessions) {
+			String cancelReason, @NotNull List<SessionResponse> sessions,
+			@NotNull List<TicketTypeDtos.PublicTicketTypeResponse> ticketTypes) {
 	}
 }

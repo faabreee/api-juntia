@@ -135,4 +135,9 @@ class OrganizationRepository {
 		return jdbc.sql("SELECT name FROM organizations WHERE id = :id").param("id", organizationId)
 				.query(String.class).single();
 	}
+
+	String organizationCurrency(String organizationId) {
+		return jdbc.sql("SELECT currency FROM organizations WHERE id = :id").param("id", organizationId)
+				.query(String.class).single();
+	}
 }

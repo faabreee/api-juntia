@@ -42,11 +42,14 @@ class EventService {
 	private final EventRepository repository;
 	private final OrganizationAccess access;
 	private final CoverStorage covers;
+	private final TicketTypeRepository ticketTypes;
 
-	EventService(EventRepository repository, OrganizationAccess access, CoverStorage covers) {
+	EventService(EventRepository repository, OrganizationAccess access, CoverStorage covers,
+			TicketTypeRepository ticketTypes) {
 		this.repository = repository;
 		this.access = access;
 		this.covers = covers;
+		this.ticketTypes = ticketTypes;
 	}
 
 	// ---------- venues ----------
@@ -209,6 +212,9 @@ class EventService {
 		session(eventId, sessionId);
 		if (event.status() == EventStatus.PUBLISHED && repository.findSessions(eventId).size() == 1) {
 			throw conflict("Un evento publicado necesita al menos una sesión; despublícalo primero");
+		}
+		if (ticketTypes.sessionInUse(sessionId)) {
+			throw conflict("La sesión está incluida en un tipo de entrada; quítala de la entrada primero");
 		}
 		repository.deleteSession(sessionId);
 	}
