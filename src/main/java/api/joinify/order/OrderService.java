@@ -30,6 +30,8 @@ import api.joinify.event.TicketInventory.TicketForSale;
 import api.joinify.identity.AuthUser;
 import api.joinify.order.OrderRepository.ItemRow;
 import api.joinify.order.OrderRepository.OrderRow;
+import api.joinify.organization.FeeSettings;
+import api.joinify.organization.OrganizationAccess;
 
 /**
  * Órdenes e inventario.
@@ -51,14 +53,16 @@ public class OrderService {
 
 	private final OrderRepository repository;
 	private final TicketInventory inventory;
+	private final OrganizationAccess organizations;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 	private final Duration holdTime;
 
-	OrderService(OrderRepository repository, TicketInventory inventory, PlatformTransactionManager transactionManager,
-			Clock clock, @Value("${app.orders.hold-minutes}") long holdMinutes) {
+	OrderService(OrderRepository repository, TicketInventory inventory, OrganizationAccess organizations,
+			PlatformTransactionManager transactionManager, Clock clock, @Value("${app.orders.hold-minutes}") long holdMinutes) {
 		this.repository = repository;
 		this.inventory = inventory;
+		this.organizations = organizations;
 		this.tx = new TransactionTemplate(transactionManager);
 		this.clock = clock;
 		this.holdTime = Duration.ofMinutes(holdMinutes);
@@ -98,16 +102,21 @@ public class OrderService {
 		if (tickets.stream().anyMatch(t -> !t.currency().equals(currency))) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Todas las entradas de una orden deben tener la misma moneda");
 		}
-		long total = 0;
+		long subtotal = 0;
 		for (int i = 0; i < ordered.size(); i++) {
-			total += tickets.get(i).priceMinor() * ordered.get(i).quantity();
+			subtotal += tickets.get(i).priceMinor() * ordered.get(i).quantity();
 		}
+		// Comisión de la plataforma (ADR 0008): la paga el comprador (se suma) o el organizador (se descuenta de su parte).
+		FeeSettings fees = organizations.feeSettingsOf(event.organizationId());
+		long fee = fees.feeFor(subtotal);
+		long total = fees.mode() == FeeSettings.Mode.PASSED_TO_BUYER ? subtotal + fee : subtotal;
 
 		// Una orden gratuita se completa sin pago; una de pago queda pendiente hasta que expire o se pague.
 		boolean free = total == 0;
 		LocalDateTime utcNow = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
-		String orderId = repository.insert(event.id(), buyer.getId(), free ? OrderStatus.PAID : OrderStatus.PENDING,
-				currency, total, key, hash, utcNow, free ? null : utcNow.plus(holdTime));
+		String orderId = repository.insert(event.id(), event.organizationId(), buyer.getId(),
+				free ? OrderStatus.PAID : OrderStatus.PENDING, currency, subtotal, fee, fees.mode().name(), total, key,
+				hash, utcNow, free ? null : utcNow.plus(holdTime));
 
 		for (int i = 0; i < ordered.size(); i++) {
 			TicketForSale ticket = tickets.get(i);
@@ -165,6 +174,73 @@ public class OrderService {
 	/** Marca la orden como pagada si sigue pendiente. La etapa de pagos decide qué hacer si devuelve false. */
 	public boolean confirmPayment(String orderId) {
 		return Boolean.TRUE.equals(tx.execute(status -> repository.markPaid(orderId, LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))));
+	}
+
+	/** Datos de una orden para cobrarla. Una orden ajena se comporta como inexistente. */
+	public record PayableOrder(String id, String organizationId, OrderStatus status, java.time.Instant expiresAt,
+			long totalMinor, long subtotalMinor, long feeMinor, String currency, String eventTitle) {
+	}
+
+	public PayableOrder payableOf(AuthUser buyer, String orderId) {
+		return toPayable(owned(buyer, orderId));
+	}
+
+	/** Igual que {@link #payableOf} pero sin comprobar el comprador: para webhooks y conciliación. */
+	public PayableOrder payableOf(String orderId) {
+		return toPayable(repository.findById(orderId)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada")));
+	}
+
+	private static PayableOrder toPayable(OrderRow o) {
+		return new PayableOrder(o.id(), o.organizationId(), o.status(),
+				o.expiresAt() == null ? null : o.expiresAt().toInstant(ZoneOffset.UTC), o.totalMinor(), o.subtotalMinor(),
+				o.feeMinor(), o.currency(), o.eventTitle());
+	}
+
+	/**
+	 * Pago tardío: la orden ya expiró o se canceló pero el dinero llegó. Si todavía hay cupo para todas las líneas se
+	 * vuelve a reservar y la orden queda pagada; si no, no se toca nada y devuelve false (el pago se reembolsa).
+	 */
+	public boolean reviveWithPayment(String orderId) {
+		return Boolean.TRUE.equals(tx.execute(status -> {
+			OrderRow order = repository.findById(orderId).orElse(null);
+			if (order == null || (order.status() != OrderStatus.EXPIRED && order.status() != OrderStatus.CANCELLED)) {
+				return false;
+			}
+			// Se compensa a mano en lugar de marcar la transacción como "solo revertir": quien llama puede
+			// estar dentro de su propia transacción (la del pago) y no debe perderla por esto.
+			List<ItemRow> reserved = new java.util.ArrayList<>();
+			for (ItemRow item : repository.findItems(orderId)) {
+				if (!inventory.tryReserve(item.ticketTypeId(), item.quantity())) {
+					reserved.forEach(r -> inventory.release(r.ticketTypeId(), r.quantity()));
+					return false;
+				}
+				reserved.add(item);
+			}
+			if (!repository.reopenAsPaid(orderId, LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))) {
+				reserved.forEach(r -> inventory.release(r.ticketTypeId(), r.quantity()));
+				return false;
+			}
+			return true;
+		}));
+	}
+
+	/** Reembolso total: la orden queda REFUNDED y sus entradas vuelven al inventario. */
+	public boolean markRefunded(String orderId) {
+		return Boolean.TRUE.equals(tx.execute(status -> {
+			if (!repository.markRefunded(orderId, LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))) {
+				return false;
+			}
+			for (ItemRow item : repository.findItems(orderId)) {
+				inventory.release(item.ticketTypeId(), item.quantity());
+			}
+			return true;
+		}));
+	}
+
+	/** Órdenes de una organización, para su panel de ventas (el llamador ya comprobó el permiso). */
+	public List<OrderView> forOrganization(String organizationId) {
+		return repository.findByOrganization(organizationId, 200).stream().map(o -> view(o, false)).toList();
 	}
 
 	/** Cierra la orden y libera su cupo en una sola transacción; solo libera quien efectivamente la cerró. */

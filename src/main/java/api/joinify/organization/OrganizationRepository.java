@@ -140,4 +140,15 @@ class OrganizationRepository {
 		return jdbc.sql("SELECT currency FROM organizations WHERE id = :id").param("id", organizationId)
 				.query(String.class).single();
 	}
+
+	record FeeOverride(String mode, Integer bps, Long fixedMinor) {
+	}
+
+	FeeOverride feeOverride(String organizationId) {
+		return jdbc.sql("SELECT platform_fee_mode, platform_fee_bps, platform_fee_fixed_minor FROM organizations WHERE id = :id")
+				.param("id", organizationId)
+				.query((rs, i) -> new FeeOverride(rs.getString("platform_fee_mode"), rs.getObject("platform_fee_bps", Integer.class),
+						rs.getObject("platform_fee_fixed_minor", Long.class)))
+				.single();
+	}
 }

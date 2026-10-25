@@ -14,9 +14,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class OrganizationAccess {
 
 	private final OrganizationRepository repository;
+	private final FeeSettings defaultFees;
 
-	OrganizationAccess(OrganizationRepository repository) {
+	OrganizationAccess(OrganizationRepository repository, @org.springframework.beans.factory.annotation.Value("${app.fees.mode}") String mode,
+			@org.springframework.beans.factory.annotation.Value("${app.fees.bps}") int bps,
+			@org.springframework.beans.factory.annotation.Value("${app.fees.fixed-minor}") long fixedMinor) {
 		this.repository = repository;
+		this.defaultFees = new FeeSettings(FeeSettings.Mode.valueOf(mode), bps, fixedMinor);
 	}
 
 	/** Exige que el usuario sea miembro y devuelve su rol. */
@@ -51,5 +55,12 @@ public class OrganizationAccess {
 	/** Moneda (ISO 4217) de la organización; los precios de sus entradas se expresan en ella. */
 	public String currencyOf(String organizationId) {
 		return repository.organizationCurrency(organizationId);
+	}
+
+	/** Comisión vigente de la organización: su configuración propia o, si no la tiene, la de la plataforma. */
+	public FeeSettings feeSettingsOf(String organizationId) {
+		OrganizationRepository.FeeOverride o = repository.feeOverride(organizationId);
+		return new FeeSettings(o.mode() == null ? defaultFees.mode() : FeeSettings.Mode.valueOf(o.mode()),
+				o.bps() == null ? defaultFees.bps() : o.bps(), o.fixedMinor() == null ? defaultFees.fixedMinor() : o.fixedMinor());
 	}
 }

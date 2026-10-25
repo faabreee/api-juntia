@@ -29,7 +29,7 @@ import com.jayway.jsonpath.JsonPath;
 
 import api.joinify.IntegrationTestSupport;
 
-@TestPropertySource(properties = "app.storage.dir=build/test-uploads")
+@TestPropertySource(properties = { "app.storage.dir=build/test-uploads", "app.fees.bps=0", "app.payments.reconcile-interval-ms=3600000" })
 class OrderTests extends IntegrationTestSupport {
 
 	@Autowired

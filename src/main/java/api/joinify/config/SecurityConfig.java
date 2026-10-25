@@ -40,12 +40,15 @@ public class SecurityConfig {
 				// Token CSRF en cookie legible por el frontend, que lo devuelve en la cabecera X-XSRF-TOKEN.
 				.csrf(csrf -> csrf
 						.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+						// Los avisos de la pasarela no llevan cookie ni token CSRF: se autentican por firma o secreto.
+						.ignoringRequestMatchers("/api/webhooks/**")
 						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
 				.exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/actuator/health/**", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 						.requestMatchers("/api/auth/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
+						.requestMatchers(HttpMethod.POST, "/api/webhooks/**").permitAll()
 						.anyRequest().authenticated())
 				.build();
 	}

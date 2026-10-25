@@ -19,7 +19,7 @@ import api.joinify.event.EventRepository.EventRow;
 @Service
 public class TicketInventory {
 
-	public record EventForSale(String id, String slug, String title) {
+	public record EventForSale(String id, String organizationId, String slug, String title) {
 	}
 
 	public record TicketForSale(String id, String name, long priceMinor, String currency) {
@@ -44,7 +44,7 @@ public class TicketInventory {
 		if (events.findSessions(event.id()).stream().noneMatch(s -> s.endsAt().isAfter(utcNow))) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "El evento ya terminó");
 		}
-		return new EventForSale(event.id(), event.slug(), event.title());
+		return new EventForSale(event.id(), event.organizationId(), event.slug(), event.title());
 	}
 
 	/** El tipo de entrada debe ser visible, estar en periodo de venta y respetar el máximo por orden. */
@@ -71,6 +71,11 @@ public class TicketInventory {
 		if (!ticketTypes.tryReserve(ticket.id(), quantity)) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Agotado: «" + ticket.name() + "» no tiene cupo suficiente");
 		}
+	}
+
+	/** Reserva cupo sin lanzar excepción: la usa el pago tardío para reabrir una orden expirada si aún hay cupo. */
+	public boolean tryReserve(String ticketTypeId, int quantity) {
+		return ticketTypes.tryReserve(ticketTypeId, quantity);
 	}
 
 	/** Devuelve cupo (orden expirada o cancelada). */

@@ -46,13 +46,13 @@ class OrderController {
 	}
 
 	record OrderResponse(@NotNull String id, @NotNull OrderStatus status, @NotNull String eventSlug, @NotNull String eventTitle,
-			@NotNull String currency, long totalMinor, @NotNull Instant createdAt, Instant expiresAt, Instant paidAt,
-			@NotNull List<ItemResponse> items) {
+			@NotNull String currency, long totalMinor, long subtotalMinor, long feeMinor, @NotNull String feeMode,
+			@NotNull Instant createdAt, Instant expiresAt, Instant paidAt, @NotNull List<ItemResponse> items) {
 
 		static OrderResponse of(OrderView v) {
 			var o = v.order();
 			return new OrderResponse(o.id(), o.status(), o.eventSlug(), o.eventTitle(), o.currency(), o.totalMinor(),
-					o.createdAt().toInstant(ZoneOffset.UTC),
+					o.subtotalMinor(), o.feeMinor(), o.feeMode(), o.createdAt().toInstant(ZoneOffset.UTC),
 					o.expiresAt() == null ? null : o.expiresAt().toInstant(ZoneOffset.UTC),
 					o.paidAt() == null ? null : o.paidAt().toInstant(ZoneOffset.UTC),
 					v.items().stream().map(i -> new ItemResponse(i.ticketTypeId(), i.name(), i.quantity(), i.unitPriceMinor())).toList());
