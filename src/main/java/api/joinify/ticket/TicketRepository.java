@@ -94,6 +94,38 @@ class TicketRepository {
 		return at <= 1 ? email : email.charAt(0) + "***" + email.substring(at);
 	}
 
+	record Holder(String userId, String email) {
+	}
+
+	record ReminderCandidate(String userId, String email, String eventId, String timezone, java.time.Instant sessionStart) {
+	}
+
+	/** Quienes tienen al menos un boleto vigente del evento. */
+	List<Holder> holdersOfEvent(String eventId) {
+		return jdbc.sql("SELECT DISTINCT t.owner_user_id, u.email FROM tickets t JOIN users u ON u.id = t.owner_user_id WHERE t.event_id = :event AND t.status = 'VALID' ORDER BY u.email")
+				.param("event", eventId).query((rs, i) -> new Holder(rs.getString("owner_user_id"), rs.getString("email"))).list();
+	}
+
+	/** Cuántos boletos vigentes tiene una persona de cada tipo de entrada de un evento. */
+	java.util.Map<String, Integer> validCountsByType(String userId, String eventId) {
+		java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+		jdbc.sql("SELECT ticket_type_id, COUNT(*) AS n FROM tickets WHERE owner_user_id = :user AND event_id = :event AND status = 'VALID' GROUP BY ticket_type_id")
+				.param("user", userId).param("event", eventId).query((rs, i) -> counts.put(rs.getString("ticket_type_id"), rs.getInt("n"))).list();
+		return counts;
+	}
+
+	/**
+	 * Sesiones que empiezan dentro del horizonte y que cubre algún boleto vigente. Se excluyen los boletos emitidos
+	 * hace poco: quien acaba de comprar ya recibió su confirmación y no necesita un recordatorio al instante.
+	 */
+	List<ReminderCandidate> reminderCandidates(LocalDateTime now, LocalDateTime horizon, LocalDateTime issuedBefore) {
+		return jdbc.sql("SELECT DISTINCT t.owner_user_id, u.email, e.id AS event_id, e.timezone, s.starts_at FROM tickets t JOIN ticket_types tt ON tt.id = t.ticket_type_id JOIN events e ON e.id = t.event_id AND e.status = 'PUBLISHED' JOIN event_sessions s ON s.event_id = e.id JOIN users u ON u.id = t.owner_user_id WHERE t.status = 'VALID' AND t.issued_at < :issuedBefore AND s.starts_at > :now AND s.starts_at <= :horizon AND (tt.access_scope = 'ALL_SESSIONS' OR EXISTS (SELECT 1 FROM ticket_type_sessions x WHERE x.ticket_type_id = tt.id AND x.session_id = s.id)) ORDER BY s.starts_at")
+				.param("now", now).param("horizon", horizon).param("issuedBefore", issuedBefore)
+				.query((rs, i) -> new ReminderCandidate(rs.getString("owner_user_id"), rs.getString("email"), rs.getString("event_id"),
+						rs.getString("timezone"), rs.getObject("starts_at", LocalDateTime.class).toInstant(java.time.ZoneOffset.UTC)))
+				.list();
+	}
+
 	boolean exists(String orderItemId, int seq) {
 		return jdbc.sql("SELECT COUNT(*) FROM tickets WHERE order_item_id = :item AND seq = :seq").param("item", orderItemId)
 				.param("seq", seq).query(Long.class).single() > 0;

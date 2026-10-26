@@ -434,12 +434,13 @@ class TicketTests extends IntegrationTestSupport {
 
 	// ---------- correo ----------
 
-	private MimeMessage sentTo(String email) {
+	/** El comprador recibe dos correos (confirmación y boletos): se busca el que tiene ese asunto. */
+	private MimeMessage sentTo(String email, String subject) {
 		return org.mockito.Mockito.mockingDetails(mailSender).getInvocations().stream()
 				.filter(i -> i.getMethod().getName().equals("send") && i.getArguments().length == 1 && i.getArguments()[0] instanceof MimeMessage)
 				.map(i -> (MimeMessage) i.getArguments()[0]).filter(m -> {
 					try {
-						return m.getAllRecipients() != null && m.getAllRecipients()[0].toString().equals(email);
+						return m.getAllRecipients() != null && m.getAllRecipients()[0].toString().equals(email) && subject.equals(m.getSubject());
 					} catch (jakarta.mail.MessagingException e) {
 						return false;
 					}
@@ -453,32 +454,33 @@ class TicketTests extends IntegrationTestSupport {
 		paidOrder(shop, buyer, 2);
 
 		// El envío es asíncrono y el simulado puede traer correos tardíos de otras pruebas: se busca el de este comprador.
-		MimeMessage message = org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> sentTo(buyer.email()), java.util.Objects::nonNull);
+		MimeMessage message = org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> sentTo(buyer.email(), "Tus boletos para Festival de boletos"), java.util.Objects::nonNull);
 
 		assertThat(message.getAllRecipients()[0].toString()).isEqualTo(buyer.email());
 		assertThat(message.getSubject()).isEqualTo("Tus boletos para Festival de boletos");
 		Multipart multipart = (Multipart) message.getContent();
 		boolean hasPdf = false;
-		String text = "";
-		for (int i = 0; i < multipart.getCount(); i++) {
-			var part = multipart.getBodyPart(i);
-			if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()) && part.getFileName().endsWith(".pdf")) {
-				hasPdf = true;
-				try (PDDocument document = Loader.loadPDF(part.getInputStream().readAllBytes())) {
-					assertThat(document.getNumberOfPages()).isEqualTo(2);
-				}
-			} else if (part.getContent() instanceof String s) {
-				text += s;
-			} else if (part.getContent() instanceof Multipart nested) {
-				for (int j = 0; j < nested.getCount(); j++) {
-					if (nested.getBodyPart(j).getContent() instanceof String s) {
-						text += s;
+		StringBuilder text = new StringBuilder();
+		// El correo es mixed > related > alternative (texto y HTML) + adjunto: se recorre en profundidad.
+		java.util.ArrayDeque<Multipart> pending = new java.util.ArrayDeque<>(List.of(multipart));
+		while (!pending.isEmpty()) {
+			Multipart current = pending.poll();
+			for (int i = 0; i < current.getCount(); i++) {
+				var part = current.getBodyPart(i);
+				if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()) && part.getFileName().endsWith(".pdf")) {
+					hasPdf = true;
+					try (PDDocument document = Loader.loadPDF(part.getInputStream().readAllBytes())) {
+						assertThat(document.getNumberOfPages()).isEqualTo(2);
 					}
+				} else if (part.getContent() instanceof String s) {
+					text.append(s).append('\n');
+				} else if (part.getContent() instanceof Multipart nested) {
+					pending.add(nested);
 				}
 			}
 		}
 		assertThat(hasPdf).isTrue();
-		assertThat(text).contains("Aquí están tus 2 boletos").contains("todos los boletos").contains("/tickets");
+		assertThat(text.toString()).contains("Aquí están tus 2 boletos").contains("todos los boletos").contains("/tickets");
 	}
 
 	@Test

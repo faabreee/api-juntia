@@ -252,6 +252,20 @@ public class OrderService {
 		}));
 	}
 
+	/** Resumen de una orden para armar su correo de confirmación. */
+	public record OrderSummary(String orderId, String buyerId, String organizationId, String eventId, String eventTitle, OrderStatus status,
+			String currency, long subtotalMinor, long feeMinor, boolean feePaidByBuyer, long totalMinor, List<SummaryLine> lines) {
+		public record SummaryLine(String name, int quantity, long unitPriceMinor) {
+		}
+	}
+
+	public java.util.Optional<OrderSummary> summaryOf(String orderId) {
+		return repository.findById(orderId).map(o -> new OrderSummary(o.id(), o.buyerId(), o.organizationId(), o.eventId(), o.eventTitle(),
+				o.status(), o.currency(), o.subtotalMinor(), o.feeMinor(), FeeSettings.Mode.PASSED_TO_BUYER.name().equals(o.feeMode()),
+				o.totalMinor(), repository.findItems(o.id()).stream()
+						.map(i -> new OrderSummary.SummaryLine(i.name(), i.quantity(), i.unitPriceMinor())).toList()));
+	}
+
 	/** Líneas de una orden pagada, para emitir sus boletos. Vacío si la orden no está pagada. */
 	public record IssuanceData(String orderId, String eventId, String buyerId, List<Line> lines) {
 		public record Line(String orderItemId, String ticketTypeId, int quantity) {

@@ -26,6 +26,8 @@ import org.springframework.test.web.servlet.request.AbstractMockHttpServletReque
 import jakarta.servlet.http.Cookie;
 
 /** Base para pruebas de integración: MockMvc, correo simulado y usuarios con sesión. */
+@org.springframework.test.context.TestPropertySource(properties = { "app.notifications.dispatch-interval-ms=3600000",
+		"app.notifications.reminder-interval-ms=3600000" })
 @SpringBootTest
 @AutoConfigureMockMvc
 public abstract class IntegrationTestSupport {

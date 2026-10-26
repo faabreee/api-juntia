@@ -23,7 +23,7 @@ public class EventCatalog {
 	}
 
 	public record EventDetails(String id, String organizationId, EventStatus status, String slug, String title, String timezone,
-			String organizationName, List<SessionInfo> sessions) {
+			String organizationName, String cancelReason, List<SessionInfo> sessions) {
 	}
 
 	private final EventRepository events;
@@ -48,7 +48,7 @@ public class EventCatalog {
 		EventRow event = events.findEventById(eventId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Evento no encontrado"));
 		return new EventDetails(event.id(), event.organizationId(), event.status(), event.slug(), event.title(), event.timezone(),
-				organizations.nameOf(event.organizationId()),
+				organizations.nameOf(event.organizationId()), event.cancelReason(),
 				events.findSessions(event.id()).stream()
 						.map(s -> new SessionInfo(s.id(), s.name(), s.startsAt().toInstant(ZoneOffset.UTC),
 								s.endsAt().toInstant(ZoneOffset.UTC), s.venueName(), s.venueAddress(), s.venueCity()))

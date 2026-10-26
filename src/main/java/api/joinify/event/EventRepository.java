@@ -236,4 +236,10 @@ class EventRepository {
 	void deleteSession(String sessionId) {
 		jdbc.sql("DELETE FROM event_sessions WHERE id = :id").param("id", sessionId).update();
 	}
+
+	/** Eventos publicados que tienen alguna sesión en ese lugar (un cambio del lugar los afecta). */
+	List<String> publishedEventIdsUsingVenue(String venueId) {
+		return jdbc.sql("SELECT DISTINCT e.id FROM events e JOIN event_sessions s ON s.event_id = e.id WHERE s.venue_id = :venue AND e.status = 'PUBLISHED'")
+				.param("venue", venueId).query(String.class).list();
+	}
 }

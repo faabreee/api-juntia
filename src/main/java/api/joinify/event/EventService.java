@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,13 +44,15 @@ class EventService {
 	private final OrganizationAccess access;
 	private final CoverStorage covers;
 	private final TicketTypeRepository ticketTypes;
+	private final ApplicationEventPublisher events;
 
 	EventService(EventRepository repository, OrganizationAccess access, CoverStorage covers,
-			TicketTypeRepository ticketTypes) {
+			TicketTypeRepository ticketTypes, ApplicationEventPublisher events) {
 		this.repository = repository;
 		this.access = access;
 		this.covers = covers;
 		this.ticketTypes = ticketTypes;
+		this.events = events;
 	}
 
 	// ---------- venues ----------
@@ -74,6 +77,8 @@ class EventService {
 		access.requireManager(orgId, user.getId());
 		venue(orgId, venueId);
 		repository.updateVenue(venueId, name.trim(), blankToNull(address), blankToNull(city), validCountry(country), capacity);
+		// Un cambio del lugar afecta a quien tiene boletos de los eventos publicados que lo usan.
+		repository.publishedEventIdsUsingVenue(venueId).forEach(id -> events.publishEvent(new EventScheduleChanged(id)));
 		return venue(orgId, venueId);
 	}
 
@@ -119,8 +124,14 @@ class EventService {
 	@Transactional
 	EventRow update(AuthUser user, String orgId, String eventId, String title, String description, String timezone) {
 		access.requireManager(orgId, user.getId());
-		editable(event(orgId, eventId));
-		repository.updateEvent(eventId, title.trim(), blankToNull(description), validTimezone(timezone));
+		EventRow before = event(orgId, eventId);
+		editable(before);
+		String newTimezone = validTimezone(timezone);
+		repository.updateEvent(eventId, title.trim(), blankToNull(description), newTimezone);
+		// Solo el título y la zona horaria cambian lo que la gente ve de su boleto; la descripción no merece un correo.
+		if (before.status() == EventStatus.PUBLISHED && (!before.title().equals(title.trim()) || !before.timezone().equals(newTimezone))) {
+			events.publishEvent(new EventScheduleChanged(eventId));
+		}
 		return event(orgId, eventId);
 	}
 
@@ -182,6 +193,7 @@ class EventService {
 			throw conflict("El evento ya está cancelado");
 		}
 		repository.updateStatus(eventId, EventStatus.CANCELLED, blankToNull(reason));
+		events.publishEvent(new EventCancelled(eventId));
 		return event(orgId, eventId);
 	}
 
@@ -193,6 +205,7 @@ class EventService {
 		editable(event(orgId, eventId));
 		validateSession(orgId, in);
 		String id = repository.insertSession(eventId, in.name().trim(), utc(in.startsAt()), utc(in.endsAt()), in.venueId());
+		announceScheduleChange(event(orgId, eventId));
 		return repository.findSession(eventId, id).orElseThrow();
 	}
 
@@ -203,6 +216,7 @@ class EventService {
 		session(eventId, sessionId);
 		validateSession(orgId, in);
 		repository.updateSession(sessionId, in.name().trim(), utc(in.startsAt()), utc(in.endsAt()), in.venueId());
+		announceScheduleChange(event(orgId, eventId));
 		return session(eventId, sessionId);
 	}
 
@@ -219,6 +233,13 @@ class EventService {
 			throw conflict("La sesión está incluida en un tipo de entrada; quítala de la entrada primero");
 		}
 		repository.deleteSession(sessionId);
+		announceScheduleChange(event);
+	}
+
+	private void announceScheduleChange(EventRow event) {
+		if (event.status() == EventStatus.PUBLISHED) {
+			events.publishEvent(new EventScheduleChanged(event.id()));
+		}
 	}
 
 	// ---------- cover ----------
